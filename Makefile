@@ -5,3 +5,11 @@ build:
 .PHONY: run
 run:
 	go run ./cmd
+
+.PHONY: test
+test:
+	go test ./... -count=1
+
+.PHONY: generate
+generate:
+	go generate ./...

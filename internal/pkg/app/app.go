@@ -8,7 +8,6 @@ import (
 	"github.com/go-chi/chi"
 	"go.uber.org/zap"
 
-	"github.com/ivanovaleksey/resizer/internal/pkg/imagestore"
 	"github.com/ivanovaleksey/resizer/internal/pkg/resizer"
 )
 
@@ -36,9 +35,7 @@ func (a *Application) Handler() http.Handler {
 
 func (a *Application) Init() error {
 	a.handler = chi.ServerBaseContext(a.ctx, a.initRouter())
-
-	imageProvider := imagestore.NewHTTPStore()
-	a.resizer = resizer.NewResizer(a.logger, imageProvider)
+	a.resizer = resizer.NewService(a.logger)
 
 	return nil
 }
