@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi"
+	"github.com/go-http-utils/etag"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
@@ -50,7 +51,7 @@ func (a *Application) initRouter() http.Handler {
 	r := chi.NewRouter()
 
 	r.Route("/image", func(r chi.Router) {
-		r.Get("/resize", a.resizeImage)
+		r.Get("/resize", etag.Handler(http.HandlerFunc(a.resizeImage), false).ServeHTTP)
 	})
 
 	return r

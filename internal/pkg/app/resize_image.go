@@ -13,6 +13,8 @@ import (
 
 func (a *Application) resizeImage(w http.ResponseWriter, r *http.Request) {
 	const (
+		maxAge          = 3600
+
 		urlParamName    = "url"
 		widthParamName  = "width"
 		heightParamName = "height"
@@ -54,6 +56,7 @@ func (a *Application) resizeImage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	w.Header().Set("Cache-Control", "max-age="+strconv.Itoa(maxAge))
 	w.Header().Set("Content-Type", "image/jpeg")
 	w.Header().Set("Content-Length", strconv.Itoa(buf.Len()))
 	if _, err := w.Write(buf.Bytes()); err != nil {
