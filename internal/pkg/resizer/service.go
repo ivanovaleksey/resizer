@@ -51,12 +51,8 @@ func NewService(logger *zap.Logger, opts ...ServiceOption) (Service, error) {
 }
 
 func (r Service) Resize(ctx context.Context, target string, params Params) (image.Image, error) {
-	entity := cache.Entity{
-		URL:    target,
-		Width:  params.Width,
-		Height: params.Height,
-	}
-	cachedImage, err := r.cache.Get(entity)
+	entity := cache.Entity(target)
+	img, err := r.cache.Get(entity)
 	if err != nil {
 		if cache.IsMiss(err) {
 			r.logger.Debug("cache miss")
@@ -64,14 +60,18 @@ func (r Service) Resize(ctx context.Context, target string, params Params) (imag
 			r.logger.Error("can't get from cache", zap.Error(err), zap.String("key", entity.Key()))
 		}
 	}
-	if cachedImage != nil {
+	if img != nil {
 		r.logger.Debug("cache hit")
-		return cachedImage, nil
 	}
 
-	img, err := r.imageProvider.GetImage(ctx, target)
-	if err != nil {
-		return nil, errors.Wrap(err, "can't get image")
+	if img == nil {
+		img, err = r.imageProvider.GetImage(ctx, target)
+		if err != nil {
+			return nil, errors.Wrap(err, "can't get image")
+		}
+		if err := r.cache.Set(entity, img); err != nil {
+			r.logger.Error("can't set cache", zap.Error(err), zap.String("key", entity.Key()))
+		}
 	}
 
 	type resizeResult struct {
@@ -94,9 +94,6 @@ func (r Service) Resize(ctx context.Context, target string, params Params) (imag
 	case result := <-resize:
 		if err := result.err; err != nil {
 			return nil, err
-		}
-		if err := r.cache.Set(entity, result.ok); err != nil {
-			r.logger.Error("can't set cache", zap.Error(err), zap.String("key", entity.Key()))
 		}
 		return result.ok, nil
 	case <-ctx.Done():

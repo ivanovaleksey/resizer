@@ -1,13 +1,7 @@
 package cache
 
-import "strconv"
-
-type Entity struct {
-	URL    string
-	Width  int
-	Height int
-}
+type Entity string
 
 func (e Entity) Key() string {
-	return e.URL + "-" + strconv.Itoa(e.Width) + "x" + strconv.Itoa(e.Height)
+	return string(e)
 }
