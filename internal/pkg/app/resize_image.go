@@ -39,7 +39,7 @@ func (a *Application) resizeImage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	params := resizer.Params{Width: imageWidth, Height: imageHeight}
-	image, err := a.resizer.Resize(ctx, imageURL, params)
+	image, err := a.resizeService.Resize(ctx, imageURL, params)
 	if err != nil {
 		a.logger.Error("can't resize image", zap.Error(err))
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)

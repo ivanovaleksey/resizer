@@ -13,3 +13,9 @@ func WithImageResizer(resizer ImageResizer) ServiceOption {
 		service.imageResizer = resizer
 	}
 }
+
+func WithCacheProvider(provider CacheProvider) ServiceOption {
+	return func(service *Service) {
+		service.cache = provider
+	}
+}

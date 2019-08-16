@@ -3,6 +3,7 @@ module github.com/ivanovaleksey/resizer
 go 1.12
 
 require (
+	github.com/allegro/bigcache v1.2.1
 	github.com/disintegration/imaging v1.6.0
 	github.com/go-chi/chi v4.0.2+incompatible
 	github.com/pkg/errors v0.8.1

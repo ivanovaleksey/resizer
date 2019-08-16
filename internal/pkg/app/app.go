@@ -6,16 +6,17 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi"
+	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
 	"github.com/ivanovaleksey/resizer/internal/pkg/resizer"
 )
 
 type Application struct {
-	ctx     context.Context
-	logger  *zap.Logger
-	handler http.Handler
-	resizer Resizer
+	ctx           context.Context
+	logger        *zap.Logger
+	handler       http.Handler
+	resizeService Resizer
 }
 
 type Resizer interface {
@@ -35,7 +36,12 @@ func (a *Application) Handler() http.Handler {
 
 func (a *Application) Init() error {
 	a.handler = chi.ServerBaseContext(a.ctx, a.initRouter())
-	a.resizer = resizer.NewService(a.logger)
+
+	service, err := resizer.NewService(a.logger)
+	if err != nil {
+		return errors.Wrap(err, "can't create service")
+	}
+	a.resizeService = service
 
 	return nil
 }
