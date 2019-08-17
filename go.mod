@@ -4,6 +4,7 @@ go 1.12
 
 require (
 	github.com/allegro/bigcache v1.2.1
+	github.com/cespare/xxhash v1.1.0
 	github.com/disintegration/imaging v1.6.0
 	github.com/go-chi/chi v4.0.2+incompatible
 	github.com/go-http-utils/etag v0.0.0-20161124023236-513ea8f21eb1

@@ -10,7 +10,10 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
+	"github.com/ivanovaleksey/resizer/internal/pkg/cache"
+	"github.com/ivanovaleksey/resizer/internal/pkg/imagestore"
 	"github.com/ivanovaleksey/resizer/internal/pkg/resizer"
+	"github.com/ivanovaleksey/resizer/internal/pkg/singleflight"
 )
 
 type Application struct {
@@ -35,10 +38,20 @@ func (a *Application) Handler() http.Handler {
 	return a.handler
 }
 
-func (a *Application) Init() error {
+func (a *Application) Init(cfg Config) error {
 	a.handler = chi.ServerBaseContext(a.ctx, a.initRouter())
 
-	service, err := resizer.NewService(a.logger)
+	imageProvider, err := a.initImageProvider(cfg)
+	if err != nil {
+		return errors.Wrap(err, "can't create image provider")
+	}
+
+	opts := []resizer.ServiceOption{
+		resizer.WithLogger(a.logger),
+		resizer.WithImageProvider(imageProvider),
+		resizer.WithImageResizer(resizer.NewResizer()),
+	}
+	service, err := resizer.NewService(opts...)
 	if err != nil {
 		return errors.Wrap(err, "can't create service")
 	}
@@ -55,4 +68,27 @@ func (a *Application) initRouter() http.Handler {
 	})
 
 	return r
+}
+
+func (a *Application) initImageProvider(cfg Config) (resizer.ImageProvider, error) {
+	imageCache, err := cache.NewCache()
+	if err != nil {
+		return nil, errors.Wrap(err, "can't create cache")
+	}
+	var imageProvider resizer.ImageProvider
+	switch cfg.ImageProvider {
+	case 1:
+		imageProvider = imagestore.NewHTTPStore()
+	case 2:
+		imageProvider = imagestore.NewFileStore()
+	default:
+		return nil, errors.New("unknown image provider")
+	}
+
+	opts := []singleflight.Option{
+		singleflight.WithLogger(a.logger),
+		singleflight.WithCacheProvider(imageCache),
+		singleflight.WithImageProvider(imageProvider),
+	}
+	return singleflight.NewSingleFlight(opts...), nil
 }

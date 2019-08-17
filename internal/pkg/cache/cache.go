@@ -33,6 +33,9 @@ func NewCache() (Cache, error) {
 
 func (c Cache) Get(entity Entity) (image.Image, error) {
 	value, err := c.inner.Get(entity.Key())
+	if err == bigcache.ErrEntryNotFound {
+		return nil, ErrCacheMiss
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -53,8 +56,4 @@ func (c Cache) Set(entity Entity, value image.Image) error {
 	}
 
 	return c.inner.Set(entity.Key(), buf.Bytes())
-}
-
-func IsMiss(err error) bool {
-	return err == bigcache.ErrEntryNotFound
 }

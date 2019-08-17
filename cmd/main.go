@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"flag"
 	"log"
 	"net/http"
 	"os"
@@ -14,6 +15,10 @@ import (
 )
 
 func main() {
+	var cfg app.Config
+	flag.IntVar(&cfg.ImageProvider, "image_provider", 1, "1 - http, 2 - file")
+	flag.Parse()
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -24,7 +29,7 @@ func main() {
 	defer logger.Sync()
 
 	application := app.NewApp(ctx, logger)
-	if err := application.Init(); err != nil {
+	if err := application.Init(cfg); err != nil {
 		logger.Fatal("can't init application")
 	}
 

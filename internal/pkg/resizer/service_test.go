@@ -12,20 +12,13 @@ import (
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
 
-	"github.com/ivanovaleksey/resizer/internal/pkg/resizer/cache"
 	"github.com/ivanovaleksey/resizer/internal/pkg/resizer/mocks"
 )
 
 func TestResizer_Resize(t *testing.T) {
 	url := "http://example.com/1.jpg"
 	params := Params{Width: 500, Height: 300}
-	entity := cache.Entity{
-		URL:    url,
-		Width:  params.Width,
-		Height: params.Height,
-	}
 
 	file, err := ioutil.ReadFile("testdata/nature.jpg")
 	require.NoError(t, err)
@@ -36,96 +29,75 @@ func TestResizer_Resize(t *testing.T) {
 	srcImage, err := jpeg.Decode(bytes.NewReader(file))
 	require.NoError(t, err)
 
-	t.Run("with value in cache", func(t *testing.T) {
+	t.Run("when unable to get image", func(t *testing.T) {
 		ctx := context.Background()
 
-		cacheMock := &mocks.CacheProvider{}
-		cacheMock.On("Get", entity).Return(srcImage, nil)
-
-		resizer, err := NewService(zap.NewNop(), WithCacheProvider(cacheMock))
+		imageProvider := &mocks.ImageProvider{}
+		resizer, err := NewService(WithImageProvider(imageProvider))
 		require.NoError(t, err)
+
+		imageErr := errors.New("some error")
+		imageProvider.On("GetImage", ctx, url).Return(nil, imageErr)
 
 		out, err := resizer.Resize(ctx, url, params)
 
-		require.NoError(t, err)
-		assert.Equal(t, srcImage, out)
-		cacheMock.AssertExpectations(t)
+		require.Error(t, err)
+		assert.EqualError(t, err, "can't get image: some error")
+		assert.Nil(t, out)
+		imageProvider.AssertExpectations(t)
 	})
 
-	t.Run("without value in cache", func(t *testing.T) {
-		cacheMock := &mocks.CacheProvider{}
-		cacheMock.On("Get", entity).Return(nil, errors.New("not found"))
-
-		t.Run("when unable to get image", func(t *testing.T) {
-			ctx := context.Background()
+	t.Run("when able to get image", func(t *testing.T) {
+		t.Run("with long resizing", func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+			defer cancel()
 
 			imageProvider := &mocks.ImageProvider{}
-			resizer, err := NewService(zap.NewNop(), WithImageProvider(imageProvider), WithCacheProvider(cacheMock))
+			opts := []ServiceOption{
+				WithImageProvider(imageProvider),
+				WithImageResizer(sleepyResizer{timeout: 1 * time.Second}),
+			}
+			resizer, err := NewService(opts...)
 			require.NoError(t, err)
 
-			imageErr := errors.New("some error")
-			imageProvider.On("GetImage", ctx, url).Return(nil, imageErr)
+			imageProvider.On("GetImage", ctx, url).Return(srcImage, nil)
 
 			out, err := resizer.Resize(ctx, url, params)
 
 			require.Error(t, err)
-			assert.EqualError(t, err, "can't get image: some error")
+			require.Error(t, ctx.Err())
+			assert.EqualError(t, err, ctx.Err().Error())
 			assert.Nil(t, out)
 			imageProvider.AssertExpectations(t)
-			cacheMock.AssertExpectations(t)
 		})
 
-		t.Run("when able to get image", func(t *testing.T) {
-			t.Run("with long resizing", func(t *testing.T) {
-				ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
-				defer cancel()
+		t.Run("with fast resizing", func(t *testing.T) {
+			ctx := context.Background()
 
-				imageProvider := &mocks.ImageProvider{}
-				opts := []ServiceOption{
-					WithImageProvider(imageProvider),
-					WithImageResizer(sleepyResizer{timeout: 1 * time.Second}),
-					WithCacheProvider(cacheMock),
-				}
-				resizer, err := NewService(zap.NewNop(), opts...)
-				require.NoError(t, err)
+			imageProvider := &mocks.ImageProvider{}
+			opts := []ServiceOption{
+				WithImageProvider(imageProvider),
+				WithImageResizer(NewResizer()),
+			}
+			resizer, err := NewService(opts...)
+			require.NoError(t, err)
 
-				imageProvider.On("GetImage", ctx, url).Return(srcImage, nil)
+			imageProvider.On("GetImage", ctx, url).Return(srcImage, nil)
 
-				out, err := resizer.Resize(ctx, url, params)
+			out, err := resizer.Resize(ctx, url, params)
 
-				require.Error(t, err)
-				require.Error(t, ctx.Err())
-				assert.EqualError(t, err, ctx.Err().Error())
-				assert.Nil(t, out)
-				imageProvider.AssertExpectations(t)
-				cacheMock.AssertExpectations(t)
-			})
+			require.NoError(t, err)
+			require.NotNil(t, out)
 
-			t.Run("with fast resizing", func(t *testing.T) {
-				ctx := context.Background()
+			buf := bytes.NewBuffer(nil)
+			err = jpeg.Encode(buf, out, nil)
+			require.NoError(t, err)
 
-				imageProvider := &mocks.ImageProvider{}
-				resizer, err := NewService(zap.NewNop(), WithImageProvider(imageProvider))
-				require.NoError(t, err)
-
-				imageProvider.On("GetImage", ctx, url).Return(srcImage, nil)
-
-				out, err := resizer.Resize(ctx, url, params)
-
-				require.NoError(t, err)
-				require.NotNil(t, out)
-
-				buf := bytes.NewBuffer(nil)
-				err = jpeg.Encode(buf, out, nil)
-				require.NoError(t, err)
-
-				outCfg, err := jpeg.DecodeConfig(buf)
-				require.NoError(t, err)
-				assert.Equal(t, 500, outCfg.Width)
-				assert.Equal(t, 300, outCfg.Height)
-				imageProvider.AssertExpectations(t)
-				cacheMock.AssertExpectations(t)
-			})
+			outCfg, err := jpeg.DecodeConfig(buf)
+			require.NoError(t, err)
+			assert.Equal(t, 500, outCfg.Width)
+			assert.Equal(t, 300, outCfg.Height)
+			imageProvider.AssertExpectations(t)
 		})
 	})
 }

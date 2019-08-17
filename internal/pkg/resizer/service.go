@@ -6,16 +6,12 @@ import (
 
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
-
-	"github.com/ivanovaleksey/resizer/internal/pkg/imagestore"
-	"github.com/ivanovaleksey/resizer/internal/pkg/resizer/cache"
 )
 
 type Service struct {
 	logger        *zap.Logger
 	imageProvider ImageProvider
 	imageResizer  ImageResizer
-	cache         CacheProvider
 }
 
 type ImageProvider interface {
@@ -26,21 +22,11 @@ type ImageResizer interface {
 	Resize(image.Image, Params) (image.Image, error)
 }
 
-type CacheProvider interface {
-	Get(cache.Entity) (image.Image, error)
-	Set(cache.Entity, image.Image) error
-}
-
-func NewService(logger *zap.Logger, opts ...ServiceOption) (Service, error) {
-	ch, err := cache.NewCache()
-	if err != nil {
-		return Service{}, err
-	}
+func NewService(opts ...ServiceOption) (Service, error) {
 	s := Service{
-		logger:        logger,
-		imageProvider: imagestore.NewHTTPStore(),
-		imageResizer:  Resizer{},
-		cache:         ch,
+		logger:        zap.NewNop(),
+		imageProvider: dummyImageProvider{},
+		imageResizer:  dummyResizer{},
 	}
 
 	for _, opt := range opts {
@@ -51,27 +37,9 @@ func NewService(logger *zap.Logger, opts ...ServiceOption) (Service, error) {
 }
 
 func (r Service) Resize(ctx context.Context, target string, params Params) (image.Image, error) {
-	entity := cache.Entity(target)
-	img, err := r.cache.Get(entity)
+	img, err := r.imageProvider.GetImage(ctx, target)
 	if err != nil {
-		if cache.IsMiss(err) {
-			r.logger.Debug("cache miss")
-		} else {
-			r.logger.Error("can't get from cache", zap.Error(err), zap.String("key", entity.Key()))
-		}
-	}
-	if img != nil {
-		r.logger.Debug("cache hit")
-	}
-
-	if img == nil {
-		img, err = r.imageProvider.GetImage(ctx, target)
-		if err != nil {
-			return nil, errors.Wrap(err, "can't get image")
-		}
-		if err := r.cache.Set(entity, img); err != nil {
-			r.logger.Error("can't set cache", zap.Error(err), zap.String("key", entity.Key()))
-		}
+		return nil, errors.Wrap(err, "can't get image")
 	}
 
 	type resizeResult struct {
@@ -82,12 +50,9 @@ func (r Service) Resize(ctx context.Context, target string, params Params) (imag
 	resize := make(chan resizeResult, 1)
 	go func() {
 		defer close(resize)
-		out, err := r.imageResizer.Resize(img, params)
-		if err != nil {
-			resize <- resizeResult{err: err}
-			return
-		}
-		resize <- resizeResult{ok: out}
+		var result resizeResult
+		result.ok, result.err = r.imageResizer.Resize(img, params)
+		resize <- result
 	}()
 
 	select {

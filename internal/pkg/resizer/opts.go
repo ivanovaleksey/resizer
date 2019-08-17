@@ -1,5 +1,7 @@
 package resizer
 
+import "go.uber.org/zap"
+
 type ServiceOption func(*Service)
 
 func WithImageProvider(provider ImageProvider) ServiceOption {
@@ -14,8 +16,8 @@ func WithImageResizer(resizer ImageResizer) ServiceOption {
 	}
 }
 
-func WithCacheProvider(provider CacheProvider) ServiceOption {
+func WithLogger(logger *zap.Logger) ServiceOption {
 	return func(service *Service) {
-		service.cache = provider
+		service.logger = logger
 	}
 }
