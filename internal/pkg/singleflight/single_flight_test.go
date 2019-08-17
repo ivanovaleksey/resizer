@@ -16,16 +16,18 @@ import (
 )
 
 func TestSingleFlight_GetImage(t *testing.T) {
-	const goroutinesCount = 10000
-
-	url := "http://example.com/1.jpg"
-	srcImage := test.SampleImage(t, 3)
+	const (
+		goroutinesCount = 10000
+		url             = "http://example.com/1.jpg"
+	)
 
 	t.Run("it waits for in-flight calls", func(t *testing.T) {
 		ctx := context.Background()
-		imageProvider := &imageProviderWithCounter{img: srcImage}
+
+		imageCache := &simpleImageCache{m: make(map[cache.Entity]image.Image)}
+		imageProvider := newImageProvider(t)
 		opts := []Option{
-			WithCacheProvider(&simpleImageCache{m: make(map[cache.Entity]image.Image)}),
+			WithCacheProvider(imageCache),
 			WithImageProvider(imageProvider),
 		}
 		s := NewSingleFlight(opts...)
@@ -41,13 +43,16 @@ func TestSingleFlight_GetImage(t *testing.T) {
 		wg.Wait()
 
 		assert.EqualValues(t, 1, imageProvider.Counter())
+		assert.Equal(t, 1, len(imageCache.m))
 	})
 
 	t.Run("it serves from cache", func(t *testing.T) {
 		ctx := context.Background()
-		imageProvider := &imageProviderWithCounter{img: srcImage}
+
+		imageCache := &simpleImageCache{m: make(map[cache.Entity]image.Image)}
+		imageProvider := newImageProvider(t)
 		opts := []Option{
-			WithCacheProvider(&simpleImageCache{m: make(map[cache.Entity]image.Image)}),
+			WithCacheProvider(imageCache),
 			WithImageProvider(imageProvider),
 		}
 		s := NewSingleFlight(opts...)
@@ -72,18 +77,67 @@ func TestSingleFlight_GetImage(t *testing.T) {
 		wg.Wait()
 
 		assert.EqualValues(t, goroutinesCount, imageProvider.Counter())
+		assert.Equal(t, goroutinesCount, len(imageCache.m))
+	})
+
+	t.Run("it respects deadline", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+		defer cancel()
+
+		imageCache := &simpleImageCache{m: make(map[cache.Entity]image.Image)}
+		imageProvider := newImageProvider(t)
+		imageProvider.timeout = 300 * time.Millisecond
+		opts := []Option{
+			WithCacheProvider(imageCache),
+			WithImageProvider(imageProvider),
+		}
+		s := NewSingleFlight(opts...)
+
+		errors := make(chan error, goroutinesCount)
+		var wg sync.WaitGroup
+		for i := 0; i < goroutinesCount; i++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				_, err := s.GetImage(ctx, url)
+				errors <- err
+			}()
+		}
+		wg.Wait()
+		close(errors)
+
+		var errorCount int
+		for err := range errors {
+			assert.Equal(t, ctx.Err(), err)
+			errorCount++
+		}
+
+		assert.Empty(t, imageCache.m)
+		assert.Equal(t, goroutinesCount, errorCount)
 	})
 }
 
 type imageProviderWithCounter struct {
 	counter int32 // atomic access
 	img     image.Image
+	timeout time.Duration
+}
+
+func newImageProvider(t *testing.T) *imageProviderWithCounter {
+	return &imageProviderWithCounter{
+		img:     test.SampleImage(t, 3),
+		timeout: 100 * time.Millisecond,
+	}
 }
 
 func (i *imageProviderWithCounter) GetImage(ctx context.Context, target string) (image.Image, error) {
-	time.Sleep(100 * time.Millisecond)
 	atomic.AddInt32(&i.counter, 1)
-	return i.img, nil
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case <-time.After(i.timeout):
+		return i.img, nil
+	}
 }
 
 func (i *imageProviderWithCounter) Counter() int32 {

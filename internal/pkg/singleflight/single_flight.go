@@ -94,11 +94,7 @@ func (s *SingleFlight) GetImage(ctx context.Context, target string) (image.Image
 		lock.Unlock()
 	} else {
 		lock.Unlock()
-		select {
-		case <-entry.ready:
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		}
+		<-entry.ready
 	}
 
 	if err := entry.err; err != nil {
