@@ -1,11 +1,8 @@
 package singleflight
 
 import (
-	"bytes"
 	"context"
 	"image"
-	"image/jpeg"
-	"io/ioutil"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -13,19 +10,16 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 
 	"github.com/ivanovaleksey/resizer/internal/pkg/cache"
+	"github.com/ivanovaleksey/resizer/test"
 )
 
 func TestSingleFlight_GetImage(t *testing.T) {
 	const goroutinesCount = 10000
 
 	url := "http://example.com/1.jpg"
-	file, err := ioutil.ReadFile("../resizer/testdata/nature.jpg")
-	require.NoError(t, err)
-	srcImage, err := jpeg.Decode(bytes.NewReader(file))
-	require.NoError(t, err)
+	srcImage := test.SampleImage(t, 3)
 
 	t.Run("it waits for in-flight calls", func(t *testing.T) {
 		ctx := context.Background()

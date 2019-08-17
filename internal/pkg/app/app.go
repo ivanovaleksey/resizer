@@ -64,7 +64,7 @@ func (a *Application) initRouter() http.Handler {
 	r := chi.NewRouter()
 
 	r.Route("/image", func(r chi.Router) {
-		r.Get("/resize", etag.Handler(http.HandlerFunc(a.resizeImage), false).ServeHTTP)
+		r.Get("/resize", etag.Handler(http.HandlerFunc(a.ResizeImage), false).ServeHTTP)
 	})
 
 	return r
@@ -77,9 +77,9 @@ func (a *Application) initImageProvider(cfg Config) (resizer.ImageProvider, erro
 	}
 	var imageProvider resizer.ImageProvider
 	switch cfg.ImageProvider {
-	case 1:
+	case ImageProviderHTTP:
 		imageProvider = imagestore.NewHTTPStore()
-	case 2:
+	case ImageProviderFile:
 		imageProvider = imagestore.NewFileStore()
 	default:
 		return nil, errors.New("unknown image provider")

@@ -5,7 +5,6 @@ import (
 	"context"
 	"image"
 	"image/jpeg"
-	"io/ioutil"
 	"testing"
 	"time"
 
@@ -14,20 +13,23 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/ivanovaleksey/resizer/internal/pkg/resizer/mocks"
+	"github.com/ivanovaleksey/resizer/test"
 )
 
 func TestResizer_Resize(t *testing.T) {
 	url := "http://example.com/1.jpg"
 	params := Params{Width: 500, Height: 300}
 
-	file, err := ioutil.ReadFile("testdata/nature.jpg")
+	srcImage := test.SampleImage(t, 3)
+
+	w := bytes.NewBuffer(nil)
+	err := jpeg.Encode(w, srcImage, nil)
 	require.NoError(t, err)
-	imgCfg, err := jpeg.DecodeConfig(bytes.NewReader(file))
+
+	imgCfg, err := jpeg.DecodeConfig(w)
 	require.NoError(t, err)
 	require.Equal(t, 2560, imgCfg.Width)
 	require.Equal(t, 1920, imgCfg.Height)
-	srcImage, err := jpeg.Decode(bytes.NewReader(file))
-	require.NoError(t, err)
 
 	t.Run("when unable to get image", func(t *testing.T) {
 		ctx := context.Background()

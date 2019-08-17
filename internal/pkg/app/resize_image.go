@@ -11,7 +11,7 @@ import (
 	"github.com/ivanovaleksey/resizer/internal/pkg/resizer"
 )
 
-func (a *Application) resizeImage(w http.ResponseWriter, r *http.Request) {
+func (a *Application) ResizeImage(w http.ResponseWriter, r *http.Request) {
 	const (
 		maxAge          = 3600
 

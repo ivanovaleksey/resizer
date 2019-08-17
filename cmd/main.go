@@ -15,9 +15,12 @@ import (
 )
 
 func main() {
-	var cfg app.Config
-	flag.IntVar(&cfg.ImageProvider, "image_provider", 1, "1 - http, 2 - file")
+	imgProvider := flag.Int("image_provider", 1, "1 - http, 2 - file")
 	flag.Parse()
+
+	cfg := app.Config{
+		ImageProvider: app.ImageProviderType(*imgProvider),
+	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
